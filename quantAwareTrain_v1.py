@@ -178,6 +178,9 @@ class FakeQuantOp(torch.autograd.Function):
 
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False):
+
+    x = FakeQuantOp.apply(x, num_bits)
+
     conv1weight = model.conv1.weight.data
     model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits)
     x = F.relu(model.conv1(x))
