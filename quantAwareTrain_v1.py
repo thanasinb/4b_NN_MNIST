@@ -348,4 +348,5 @@ def mainQuantAware(mnist=True):
     return model, stats
 
 
+torch.set_printoptions(threshold=1_000_000)
 model, old_stats = mainQuantAware()
