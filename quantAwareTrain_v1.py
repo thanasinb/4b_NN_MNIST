@@ -123,6 +123,7 @@ def quantize_tensor_sym(x, num_bits=8, min_val=None, max_val=None):
 def dequantize_tensor_sym(q_x):
     return q_x.scale * (q_x.tensor.float())
 
+
 # # ## Get Stats for Quantising Activations of Network.
 # This is done by running the network with around 1000 examples and
 # getting the average min and max activation values before and after each layer.
@@ -178,7 +179,6 @@ class FakeQuantOp(torch.autograd.Function):
 
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False):
-
     x = FakeQuantOp.apply(x, num_bits)
 
     conv1weight = model.conv1.weight.data
@@ -348,4 +348,5 @@ def mainQuantAware(mnist=True):
     return model, stats
 
 
+torch.set_printoptions(threshold=1_000_000)
 model, old_stats = mainQuantAware()
