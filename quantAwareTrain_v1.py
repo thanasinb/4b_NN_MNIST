@@ -100,7 +100,7 @@ def quantize_tensor(x, num_bits=8, min_val=None, max_val=None):
 
 
 def dequantize_tensor(q_x):
-    return q_x.scale * (q_x.tensor.float() - q_x.zero_point), q_x.scale
+    return q_x.scale * (q_x.tensor.float() - q_x.zero_point)
 
 
 def quantize_tensor_sym(x, num_bits=8, min_val=None, max_val=None):
@@ -122,7 +122,6 @@ def quantize_tensor_sym(x, num_bits=8, min_val=None, max_val=None):
 
 def dequantize_tensor_sym(q_x):
     return q_x.scale * (q_x.tensor.float())
-
 
 # # ## Get Stats for Quantising Activations of Network.
 # This is done by running the network with around 1000 examples and
@@ -164,8 +163,8 @@ class FakeQuantOp(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, num_bits=8, min_val=None, max_val=None):
         x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val)
-        x, x_scale = dequantize_tensor(x)
-        return x, x_scale
+        x = dequantize_tensor(x)
+        return x
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -179,45 +178,44 @@ class FakeQuantOp(torch.autograd.Function):
 
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False):
-    x, x_scale = FakeQuantOp.apply(x, num_bits)
+
+    x = FakeQuantOp.apply(x, num_bits)
 
     conv1weight = model.conv1.weight.data
-    model.conv1.weight.data, w_scale = FakeQuantOp.apply(model.conv1.weight.data, num_bits)
+    model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits)
     x = F.relu(model.conv1(x))
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv1')
 
     if act_quant:
-        x, a_scale = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'])
 
     x = F.max_pool2d(x, 2, 2)
 
-    x_scale = a_scale
     conv2weight = model.conv2.weight.data
-    model.conv2.weight.data, w_scale = FakeQuantOp.apply(model.conv2.weight.data, num_bits)
+    model.conv2.weight.data = FakeQuantOp.apply(model.conv2.weight.data, num_bits)
     x = F.relu(model.conv2(x))
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv2')
 
     if act_quant:
-        x, a_scale = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'])
 
     x = F.max_pool2d(x, 2, 2)
 
     x = x.view(-1, 4 * 4 * 50)
 
-    x_scale = a_scale
     fc1weight = model.fc1.weight.data
-    model.fc1.weight.data, w_scale = FakeQuantOp.apply(model.fc1.weight.data, num_bits)
+    model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits)
     x = F.relu(model.fc1(x))
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
-        x, a_scale = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
 
     x = model.fc2(x)
 
@@ -350,5 +348,4 @@ def mainQuantAware(mnist=True):
     return model, stats
 
 
-torch.set_printoptions(threshold=1_000_000)
 model, old_stats = mainQuantAware()
