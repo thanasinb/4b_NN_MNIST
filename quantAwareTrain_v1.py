@@ -96,6 +96,8 @@ def quantize_tensor(x, num_bits=8, min_val=None, max_val=None):
     q_x.clamp_(qmin, qmax).round_()
     q_x = q_x.round().byte()
 
+    print('Quant   scale: ' + str(scale))
+
     return QTensor(tensor=q_x, scale=scale, zero_point=zero_point)
 
 
@@ -179,9 +181,11 @@ class FakeQuantOp(torch.autograd.Function):
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False):
 
+    x_scale = quantize_tensor(x, num_bits).scale
     x = FakeQuantOp.apply(x, num_bits)
 
     conv1weight = model.conv1.weight.data
+    w_scale = quantize_tensor(model.conv1.weight.data, num_bits).scale
     model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits)
     x = F.relu(model.conv1(x))
 
@@ -189,11 +193,16 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv1')
 
     if act_quant:
+        a_scale = quantize_tensor(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max']).scale
         x = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'])
+        m_scale = (x_scale*w_scale)/a_scale
+        print('Conv1 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
+        x_scale = a_scale
 
     x = F.max_pool2d(x, 2, 2)
 
     conv2weight = model.conv2.weight.data
+    w_scale = quantize_tensor(model.conv2.weight.data, num_bits).scale
     model.conv2.weight.data = FakeQuantOp.apply(model.conv2.weight.data, num_bits)
     x = F.relu(model.conv2(x))
 
@@ -201,13 +210,18 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv2')
 
     if act_quant:
+        a_scale = quantize_tensor(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max']).scale
         x = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'])
+        m_scale = (x_scale*w_scale)/a_scale
+        print('Conv2 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
+        x_scale = a_scale
 
     x = F.max_pool2d(x, 2, 2)
 
     x = x.view(-1, 4 * 4 * 50)
 
     fc1weight = model.fc1.weight.data
+    w_scale = quantize_tensor(model.fc1.weight.data, num_bits).scale
     model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits)
     x = F.relu(model.fc1(x))
 
@@ -215,7 +229,11 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
+        a_scale = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max']).scale
         x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
+        m_scale = (x_scale*w_scale)/a_scale
+        print('Fc1   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
+        print(' ')
 
     x = model.fc2(x)
 
@@ -279,7 +297,7 @@ def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=
 def mainQuantAware(mnist=True):
     batch_size = 64
     test_batch_size = 64
-    epochs = 1
+    epochs = 2
     num_bits = 4
     lr = 0.01
     momentum = 0.5
@@ -287,7 +305,7 @@ def mainQuantAware(mnist=True):
     log_interval = 500
     save_model = True
     no_cuda = False
-    act_quant = True
+    # act_quant = True
 
     use_cuda = not no_cuda and torch.cuda.is_available()
 
@@ -333,10 +351,10 @@ def mainQuantAware(mnist=True):
     args["log_interval"] = log_interval
     stats = {}
     for epoch in range(1, epochs + 1):
-        # if epoch > 5:
-        #     act_quant = True
-        # else:
-        #     act_quant = False
+        if epoch > 0:
+            act_quant = True
+        else:
+            act_quant = False
 
         stats = trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant,
                                 num_bits=num_bits)
