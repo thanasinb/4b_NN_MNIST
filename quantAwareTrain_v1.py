@@ -84,7 +84,7 @@ def calcScaleZeroPointSym(min_val, max_val, num_bits=8):
     return scale, 0
 
 
-def quantize_tensor(x, num_bits=8, min_val=None, max_val=None):
+def quantize_tensor(x, num_bits=8, min_val=None, max_val=None, verbose=False):
     if not min_val and not max_val:
         min_val, max_val = x.min(), x.max()
 
@@ -96,7 +96,8 @@ def quantize_tensor(x, num_bits=8, min_val=None, max_val=None):
     q_x.clamp_(qmin, qmax).round_()
     q_x = q_x.round().byte()
 
-    print('Quant   scale: ' + str(scale))
+    if verbose:
+        print('Quant   scale: ' + str(scale))
 
     return QTensor(tensor=q_x, scale=scale, zero_point=zero_point)
 
@@ -163,15 +164,15 @@ def updateStats(x, stats, key):
 
 class FakeQuantOp(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, num_bits=8, min_val=None, max_val=None):
-        x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val)
+    def forward(ctx, x, num_bits=8, min_val=None, max_val=None, verbose=False):
+        x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val, verbose=verbose)
         x = dequantize_tensor(x)
         return x
 
     @staticmethod
     def backward(ctx, grad_output):
         # straight through estimator
-        return grad_output, None, None, None
+        return grad_output, None, None, None, None
 
 
 # x = torch.tensor([1, 2, 3, 4]).float()
@@ -179,14 +180,14 @@ class FakeQuantOp(torch.autograd.Function):
 
 
 # ## Quantization Aware Training Forward Pass
-def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False):
+def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False, verbose=False):
 
     x_scale = quantize_tensor(x, num_bits).scale
-    x = FakeQuantOp.apply(x, num_bits)
+    x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
 
     conv1weight = model.conv1.weight.data
     w_scale = quantize_tensor(model.conv1.weight.data, num_bits).scale
-    model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits)
+    model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits, None, None, verbose)
     x = F.relu(model.conv1(x))
 
     with torch.no_grad():
@@ -194,7 +195,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     if act_quant:
         a_scale = quantize_tensor(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max']).scale
-        x = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'], verbose)
         m_scale = (x_scale*w_scale)/a_scale
         print('Conv1 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
         x_scale = a_scale
@@ -203,7 +204,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     conv2weight = model.conv2.weight.data
     w_scale = quantize_tensor(model.conv2.weight.data, num_bits).scale
-    model.conv2.weight.data = FakeQuantOp.apply(model.conv2.weight.data, num_bits)
+    model.conv2.weight.data = FakeQuantOp.apply(model.conv2.weight.data, num_bits, None, None, verbose)
     x = F.relu(model.conv2(x))
 
     with torch.no_grad():
@@ -211,7 +212,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     if act_quant:
         a_scale = quantize_tensor(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max']).scale
-        x = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'], verbose)
         m_scale = (x_scale*w_scale)/a_scale
         print('Conv2 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
         x_scale = a_scale
@@ -222,7 +223,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     fc1weight = model.fc1.weight.data
     w_scale = quantize_tensor(model.fc1.weight.data, num_bits).scale
-    model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits)
+    model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
     x = F.relu(model.fc1(x))
 
     with torch.no_grad():
@@ -230,7 +231,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     if act_quant:
         a_scale = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max']).scale
-        x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
+        x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
         m_scale = (x_scale*w_scale)/a_scale
         print('Fc1   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
         print(' ')
@@ -244,14 +245,15 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
 
 # # Train using Quantization Aware Training
-def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4):
+def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4, verbose=False):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output, conv1weight, conv2weight, fc1weight, stats = quantAwareTrainingForward(model, data, stats,
                                                                                        num_bits=num_bits,
-                                                                                       act_quant=act_quant)
+                                                                                       act_quant=act_quant,
+                                                                                       verbose=verbose)
 
         model.conv1.weight.data = conv1weight
         model.conv2.weight.data = conv2weight
@@ -277,7 +279,8 @@ def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=
             data, target = data.to(device), target.to(device)
             output, conv1weight, conv2weight, fc1weight, _ = quantAwareTrainingForward(model, data, stats,
                                                                                        num_bits=num_bits,
-                                                                                       act_quant=act_quant)
+                                                                                       act_quant=act_quant,
+                                                                                       verbose=False)
 
             model.conv1.weight.data = conv1weight
             model.conv2.weight.data = conv2weight
@@ -298,6 +301,7 @@ def mainQuantAware(mnist=True):
     batch_size = 64
     test_batch_size = 64
     epochs = 2
+    epochs_act_quant_active = 1
     num_bits = 4
     lr = 0.01
     momentum = 0.5
@@ -305,6 +309,7 @@ def mainQuantAware(mnist=True):
     log_interval = 500
     save_model = True
     no_cuda = False
+    verbose = False
     # act_quant = True
 
     use_cuda = not no_cuda and torch.cuda.is_available()
@@ -351,13 +356,15 @@ def mainQuantAware(mnist=True):
     args["log_interval"] = log_interval
     stats = {}
     for epoch in range(1, epochs + 1):
-        if epoch > 0:
+        if epoch > epochs_act_quant_active:
             act_quant = True
+            verbose = True
         else:
             act_quant = False
+            verbose = False
 
         stats = trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant,
-                                num_bits=num_bits)
+                                num_bits=num_bits, verbose=verbose)
         testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=num_bits)
 
     if (save_model):
