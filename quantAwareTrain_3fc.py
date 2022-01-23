@@ -9,20 +9,15 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 class Net(nn.Module):
     def __init__(self, mnist=True):
 
         super(Net, self).__init__()
         if mnist:
-            num_channels = 1
-        else:
-            num_channels = 3
-
-        self.conv1 = nn.Conv2d(num_channels, 20, 5, 1)  # (input channels, output channels, kernel size, stride)
-        self.conv2 = nn.Conv2d(20, 50, 5, 1)
-        if mnist:
-            self.fc1 = nn.Linear(4 * 4 * 50, 500)
-            self.flatten_shape = 4 * 4 * 50
+            self.fc0 = nn.Linear(784, 800)
+            self.fc1 = nn.Linear(800, 500)
+            self.flatten_shape = 784
         else:
             self.fc1 = nn.Linear(1250, 500)
             self.flatten_shape = 1250
@@ -33,14 +28,8 @@ class Net(nn.Module):
         X = 0
         y = 0
 
-        x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, 2, 2)
-        x = F.relu(self.conv2(x))
-
-        x = F.max_pool2d(x, 2, 2)
-        x = x.view(-1, self.flatten_shape)
+        x = F.relu(self.fc0(x))
         x = F.relu(self.fc1(x))
-
         x = self.fc2(x)
 
         return F.log_softmax(x, dim=1)
@@ -127,6 +116,7 @@ def quantize_tensor_sym(x, num_bits=8, min_val=None, max_val=None):
 def dequantize_tensor_sym(q_x):
     return q_x.scale * (q_x.tensor.float())
 
+
 # # ## Get Stats for Quantising Activations of Network.
 # This is done by running the network with around 1000 examples and
 # getting the average min and max activation values before and after each layer.
@@ -176,52 +166,29 @@ class FakeQuantOp(torch.autograd.Function):
         return grad_output, None, None, None, None
 
 
-# x = torch.tensor([1, 2, 3, 4]).float()
-# print(FakeQuantOp.apply(x))
-
-
 # ## Quantization Aware Training Forward Pass
-def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False, verbose=False):
-
+def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
+                              verbose=False):
     x_scale = quantize_tensor(x, num_bits).scale
     x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
 
-    conv1weight = model.conv1.weight.data
-    w_scale = quantize_tensor(model.conv1.weight.data, num_bits).scale
-    model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits, None, None, verbose)
-    x = model.conv1(x)
+    x = x.view(-1, 784)
+
+    fc0weight = model.fc0.weight.data
+    w_scale = quantize_tensor(model.fc0.weight.data, num_bits).scale
+    model.fc0.weight.data = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
+    x = model.fc0(x)
     x = F.relu(x)
-
     with torch.no_grad():
-        stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv1')
+        stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc0')
 
     if act_quant:
-        a_scale = quantize_tensor(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max']).scale
-        x = FakeQuantOp.apply(x, num_bits, stats['conv1']['ema_min'], stats['conv1']['ema_max'], verbose)
-        m_scale = (x_scale*w_scale)/a_scale
-        print('Conv1 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
-        x_scale = a_scale
-
-    x = F.max_pool2d(x, 2, 2)
-
-    conv2weight = model.conv2.weight.data
-    w_scale = quantize_tensor(model.conv2.weight.data, num_bits).scale
-    model.conv2.weight.data = FakeQuantOp.apply(model.conv2.weight.data, num_bits, None, None, verbose)
-    x = F.relu(model.conv2(x))
-
-    with torch.no_grad():
-        stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv2')
-
-    if act_quant:
-        a_scale = quantize_tensor(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max']).scale
-        x = FakeQuantOp.apply(x, num_bits, stats['conv2']['ema_min'], stats['conv2']['ema_max'], verbose)
-        m_scale = (x_scale*w_scale)/a_scale
-        print('Conv2 x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
-        x_scale = a_scale
-
-    x = F.max_pool2d(x, 2, 2)
-
-    x = x.view(-1, 4 * 4 * 50)
+        a_scale = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max']).scale
+        x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
+        m_scale = (x_scale * w_scale) / a_scale
+        print('Fc0   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(
+            a_scale) + ', M: ' + str(m_scale))
+        print(' ')
 
     fc1weight = model.fc1.weight.data
     w_scale = quantize_tensor(model.fc1.weight.data, num_bits).scale
@@ -234,15 +201,15 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
     x = model.fc1(x)
     x = F.relu(x)
-
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
         a_scale = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max']).scale
         x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
-        m_scale = (x_scale*w_scale)/a_scale
-        print('Fc1   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(a_scale) + ', M: ' + str(m_scale))
+        m_scale = (x_scale * w_scale) / a_scale
+        print('Fc1   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(
+            a_scale) + ', M: ' + str(m_scale))
         print(' ')
 
     x = model.fc2(x)
@@ -250,22 +217,22 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc2')
 
-    return F.log_softmax(x, dim=1), conv1weight, conv2weight, fc1weight, stats
+    return F.log_softmax(x, dim=1), fc0weight, fc1weight, stats
 
 
 # # Train using Quantization Aware Training
-def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4, verbose=False):
+def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4,
+                    verbose=False):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        output, conv1weight, conv2weight, fc1weight, stats = quantAwareTrainingForward(model, data, stats,
-                                                                                       num_bits=num_bits,
-                                                                                       act_quant=act_quant,
-                                                                                       verbose=verbose)
+        output, fc0weight, fc1weight, stats = quantAwareTrainingForward(model, data, stats,
+                                                                        num_bits=num_bits,
+                                                                        act_quant=act_quant,
+                                                                        verbose=verbose)
 
-        model.conv1.weight.data = conv1weight
-        model.conv2.weight.data = conv2weight
+        model.fc0.weight.data = fc0weight
         model.fc1.weight.data = fc1weight
 
         loss = F.nll_loss(output, target)
@@ -286,13 +253,12 @@ def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output, conv1weight, conv2weight, fc1weight, _ = quantAwareTrainingForward(model, data, stats,
-                                                                                       num_bits=num_bits,
-                                                                                       act_quant=act_quant,
-                                                                                       verbose=False)
+            output, fc0weight, fc1weight, _ = quantAwareTrainingForward(model, data, stats,
+                                                                        num_bits=num_bits,
+                                                                        act_quant=act_quant,
+                                                                        verbose=False)
 
-            model.conv1.weight.data = conv1weight
-            model.conv2.weight.data = conv2weight
+            model.fc0.weight.data = fc0weight
             model.fc1.weight.data = fc1weight
 
             test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
