@@ -226,7 +226,14 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     fc1weight = model.fc1.weight.data
     w_scale = quantize_tensor(model.fc1.weight.data, num_bits).scale
     model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
-    x = F.relu(model.fc1(x))
+
+    # <begin> Manual fc1 dot-product calculation
+    # b = model.fc1.bias.data
+    # dot_manual = torch.mm(x, torch.t(model.fc1.weight.data)) + b
+    # <end>   Manual fc1 dot-product calculation
+
+    x = model.fc1(x)
+    x = F.relu(x)
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
