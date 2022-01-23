@@ -169,13 +169,13 @@ class FakeQuantOp(torch.autograd.Function):
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
                               verbose=False):
-    x_scale = quantize_tensor(x, num_bits).scale
+    x_quant = quantize_tensor(x, num_bits)
     x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
 
     x = x.view(-1, 784)
 
     fc0weight = model.fc0.weight.data
-    w_scale = quantize_tensor(model.fc0.weight.data, num_bits).scale
+    w_quant = quantize_tensor(model.fc0.weight.data, num_bits)
     model.fc0.weight.data = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
     x = model.fc0(x)
     x = F.relu(x)
@@ -183,15 +183,16 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc0')
 
     if act_quant:
-        a_scale = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max']).scale
+        a_quant = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'])
         x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
-        m_scale = (x_scale * w_scale) / a_scale
-        print('Fc0   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(
-            a_scale) + ', M: ' + str(m_scale))
+        m_scale = (x_quant.scale * w_quant.scale) / a_quant.scale
+        print('fc0   x_scale: ' + str(x_quant.scale) + ', w_scale: ' + str(w_quant.scale) + ', a_scale: ' + str(
+            a_quant.scale) + ', M: ' + str(m_scale))
         print(' ')
+        x_quant = a_quant  # Activation (a) of this layer is the input of the next layer (x)
 
     fc1weight = model.fc1.weight.data
-    w_scale = quantize_tensor(model.fc1.weight.data, num_bits).scale
+    w_quant = quantize_tensor(model.fc1.weight.data, num_bits)
     model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
 
     # <begin> Manual fc1 dot-product calculation
@@ -205,11 +206,11 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
-        a_scale = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max']).scale
+        a_quant = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
         x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
-        m_scale = (x_scale * w_scale) / a_scale
-        print('Fc1   x_scale: ' + str(x_scale) + ', w_scale: ' + str(w_scale) + ', a_scale: ' + str(
-            a_scale) + ', M: ' + str(m_scale))
+        m_scale = (x_quant.scale * w_quant.scale) / a_quant.scale
+        print('fc1   x_scale: ' + str(x_quant.scale) + ', w_scale: ' + str(w_quant.scale) + ', a_scale: ' + str(
+            a_quant.scale) + ', M: ' + str(m_scale))
         print(' ')
 
     x = model.fc2(x)
