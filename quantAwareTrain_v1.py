@@ -6,7 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from collections import namedtuple
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Net(nn.Module):
     def __init__(self, mnist=True):
@@ -188,7 +189,8 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     conv1weight = model.conv1.weight.data
     w_scale = quantize_tensor(model.conv1.weight.data, num_bits).scale
     model.conv1.weight.data = FakeQuantOp.apply(model.conv1.weight.data, num_bits, None, None, verbose)
-    x = F.relu(model.conv1(x))
+    x = model.conv1(x)
+    x = F.relu(x)
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'conv1')
