@@ -183,13 +183,30 @@ class FakeQuantOp(torch.autograd.Function):
         return grad_output, None, None, None, None
 
 
+def mapMultiplierModel(x, w, num_bits):
+    x = quantize_tensor(x, num_bits)
+    w = quantize_tensor(w, num_bits)
+    x_quant = x.tensor
+    w_quant = w.tensor
+
+    res = [[0 for x in range(w_quant.size(1))] for y in range(x_quant.size(0))]
+
+    for i in range(len(w_quant)):
+        for j in range(len(x_quant[0])):
+            for k in range(len(x_quant)):
+                # resulted matrix
+                res[i][j] += w_quant[i][k] * x_quant[k][j]
+
+    return res
+
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
                               verbose=False):
+    x = x.view(-1, 784)
+
+    # c = mapMultiplierModel(x, model.fc0.weight.data, num_bits)
     x_quant = quantize_tensor(x, num_bits)
     x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
-
-    x = x.view(-1, 784)
 
     fc0weight = model.fc0.weight.data
     w_quant = quantize_tensor(model.fc0.weight.data, num_bits)
