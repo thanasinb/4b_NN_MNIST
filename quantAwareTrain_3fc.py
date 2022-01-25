@@ -202,52 +202,68 @@ class FakeQuantOp(torch.autograd.Function):
         return grad_output, None, None, None, None
 
 
+# class FakeQuantOpComp(torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, x, m_x, m_w, c, num_bits=8, min_val=None, max_val=None, verbose=False):
+#         x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val, verbose=verbose)
+#         x.tensor = x.tensor + (((m_x*m_w)/x.scale)*c)
+#         x = dequantize_tensor(x)
+#         return x
+#
+#     @staticmethod
+#     def backward(ctx, grad_output):
+#         # straight through estimator
+#         return grad_output, None, None, None, None
+
+
 def mapMultiplierModel(x, w, num_bits):
     x = quantize_tensor(x, num_bits)
     w = quantize_tensor(w, num_bits)
+    # m = x.scale * w.scale
     x_quant = x.tensor
-    w_quant = w.tensor
+    w_quant_t = torch.t(w.tensor)  # y = x.wT + b
 
-    # res = [[0 for x in range(w_quant.size(1))] for y in range(x_quant.size(0))]
-    res = torch.zeros([w_quant.size(0), x_quant.size(0)])
+    res = [[sum(lut_diff[a][b] for a, b in zip(X_row, Y_col)) for Y_col in zip(*w_quant_t)] for X_row in x_quant]
+    res = torch.tensor(res)
+    # res = torch.zeros([x_quant.size(0), w_quant_t.size(1)])
+    # for i in range(x_quant.size(0)):
+    #     for j in range(w_quant_t.size(1)):
+    #         for k in range(w_quant_t.size(0)):
+    #             # resulting matrix
+    #             res[i][j] += lut_diff[x_quant[i][k]][w_quant_t[k][j]]
 
-    for i in range(w_quant.size(0)):
-        for j in range(x_quant.size(0)):
-            for k in range(len(x_quant)):
-                # resulted matrix
-                res[i][j] += w_quant[i][k] * x_quant[k][j]
-
-    return res
+    # c = res*m
+    return res, x.scale, w.scale
 
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
                               verbose=False):
-    x_flat = x.view(-1, 784)
-    c = mapMultiplierModel(x_flat, model.fc0.weight.data, num_bits)
-
-    x = x_flat
-    x_quant = quantize_tensor(x, num_bits)
+    x = x.view(-1, 784)
     x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
-
     fc0weight = model.fc0.weight.data
-    w_quant = quantize_tensor(model.fc0.weight.data, num_bits)
     model.fc0.weight.data = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
+
+    if act_quant:
+        c, m_x, m_w = mapMultiplierModel(x, model.fc0.weight.data, num_bits)
+
     x = model.fc0(x)
+
+    if act_quant:
+        x = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose=verbose)
+        comp = (((m_x * m_w) / x.scale) * c)
+        comp = torch.round(comp)
+        x = QTensor(tensor=x.tensor + comp, scale=x.scale, zero_point=x.zero_point)
+        x = dequantize_tensor(x)
+
     x = F.relu(x)
+
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc0')
 
     if act_quant:
-        a_quant = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'])
         x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
-        m_scale = (x_quant.scale * w_quant.scale) / a_quant.scale
-        print('fc0   x_scale: ' + str(x_quant.scale) + ', w_scale: ' + str(w_quant.scale) + ', a_scale: ' + str(
-            a_quant.scale) + ', M: ' + str(m_scale))
-        print(' ')
-        x_quant = a_quant  # Activation (a) of this layer is the input of the next layer (x)
 
     fc1weight = model.fc1.weight.data
-    w_quant = quantize_tensor(model.fc1.weight.data, num_bits)
     model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
 
     # <begin> Manual fc1 dot-product calculation
@@ -261,12 +277,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
-        a_quant = quantize_tensor(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'])
         x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
-        m_scale = (x_quant.scale * w_quant.scale) / a_quant.scale
-        print('fc1   x_scale: ' + str(x_quant.scale) + ', w_scale: ' + str(w_quant.scale) + ', a_scale: ' + str(
-            a_quant.scale) + ', M: ' + str(m_scale))
-        print(' ')
 
     x = model.fc2(x)
 
