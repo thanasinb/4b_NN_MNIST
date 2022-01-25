@@ -249,11 +249,8 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     x = model.fc0(x)
 
     if act_quant:
-        x = quantize_tensor(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose=verbose)
-        comp = (((m_x * m_w) / x.scale) * c)
-        comp = torch.round(comp)
-        x = QTensor(tensor=x.tensor + comp, scale=x.scale, zero_point=x.zero_point)
-        x = dequantize_tensor(x)
+        comp = m_x * m_w * c
+        x = x + comp
 
     x = F.relu(x)
 
