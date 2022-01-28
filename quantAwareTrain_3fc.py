@@ -8,23 +8,23 @@ from torchvision import datasets, transforms
 from collections import namedtuple
 import matplotlib.pyplot as plt
 import numpy as np
-
-lut_ideal = np.array([  [0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0],
-                        [0,	0,	0,	0,	0,	0,	0,	0,	1,	1,	1,	1,	1,	1,	1,	1],
-                        [0,	0,	0,	0,	1,	1,	1,	1,	1,	1,	1,	1,	2,	2,	2,	2],
-                        [0,	0,	0,	1,	1,	1,	1,	1,	2,	2,	2,	2,	2,	3,	3,	3],
-                        [0,	0,	1,	1,	1,	1,	2,	2,	2,	2,	3,	3,	3,	3,	4,	4],
-                        [0,	0,	1,	1,	1,	2,	2,	2,	3,	3,	3,	4,	4,	4,	5,	5],
-                        [0,	0,	1,	1,	2,	2,	2,	3,	3,	4,	4,	4,	5,	5,	6,	6],
-                        [0,	0,	1,	1,	2,	2,	3,	3,	4,	4,	5,	5,	6,	6,	7,	7],
-                        [0,	1,	1,	2,	2,	3,	3,	4,	4,	5,	5,	6,	6,	7,	7,	8],
-                        [0,	1,	1,	2,	2,	3,	4,	4,	5,	5,	6,	7,	7,	8,	8,	9],
-                        [0,	1,	1,	2,	3,	3,	4,	5,	5,	6,	7,	7,	8,	9,	9,	10],
-                        [0,	1,	1,	2,	3,	4,	4,	5,	6,	7,	7,	8,	9,	10,	10,	11],
-                        [0,	1,	2,	2,	3,	4,	5,	6,	6,	7,	8,	9,	10,	10,	11,	12],
-                        [0,	1,	2,	3,	3,	4,	5,	6,	7,	8,	9,	10,	10,	11,	12,	13],
-                        [0,	1,	2,	3,	4,	5,	6,	7,	7,	8,	9,	10,	11,	12,	13,	14],
-                        [0,	1,	2,	3,	4,	5,	6,	7,	8,	9,	10,	11,	12,	13,	14,	15]])
+                    # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]])
+lut_ideal = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0,  0,  0,  0],   # 0
+                      [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,  1,  1,  1,  1,  1],   # 1
+                      [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1,  1,  2,  2,  2,  2],   # 2
+                      [0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2,  2,  2,  3,  3,  3],   # 3
+                      [0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3,  3,  3,  3,  4,  4],   # 4
+                      [0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3,  4,  4,  4,  5,  5],   # 5
+                      [0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4,  4,  5,  5,  6,  6],   # 6
+                      [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5,  5,  6,  6,  7,  7],   # 7
+                      [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5,  6,  6,  7,  7,  8],   # 8
+                      [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6,  7,  7,  8,  8,  9],   # 9
+                      [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7,  7,  8,  9,  9,  10],  # 10
+                      [0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7,  8,  9,  10, 10, 11],  # 11
+                      [0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8,  9,  10, 10, 11, 12],  # 12
+                      [0, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9,  10, 10, 11, 12, 13],  # 13
+                      [0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 9,  10, 11, 12, 13, 14],  # 14
+                      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]]) # 15
 
 lut_actual = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0],
                        [0, 1, 1, 1, 1, 1, 2, 2, 2, 2,  2,  3,  3,  3,  3,  3],
@@ -43,8 +43,8 @@ lut_actual = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0,  0,  0,  0,  0],
                        [0, 3, 4, 5, 6, 7, 8, 8, 9, 10, 11, 12, 12, 13, 14, 14],
                        [0, 3, 4, 5, 6, 7, 8, 9, 9, 10, 11, 12, 12, 13, 14, 15]])
 
-
 lut_diff = lut_ideal - lut_actual
+
 
 class Net(nn.Module):
     def __init__(self, mnist=True):
@@ -202,20 +202,6 @@ class FakeQuantOp(torch.autograd.Function):
         return grad_output, None, None, None, None
 
 
-# class FakeQuantOpComp(torch.autograd.Function):
-#     @staticmethod
-#     def forward(ctx, x, m_x, m_w, c, num_bits=8, min_val=None, max_val=None, verbose=False):
-#         x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val, verbose=verbose)
-#         x.tensor = x.tensor + (((m_x*m_w)/x.scale)*c)
-#         x = dequantize_tensor(x)
-#         return x
-#
-#     @staticmethod
-#     def backward(ctx, grad_output):
-#         # straight through estimator
-#         return grad_output, None, None, None, None
-
-
 def mapMultiplierModel(x, w, num_bits):
     x = quantize_tensor(x, num_bits)
     w = quantize_tensor(w, num_bits)
@@ -235,20 +221,23 @@ def mapMultiplierModel(x, w, num_bits):
     # c = res*m
     return res, x.scale, w.scale
 
+
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
-                              verbose=False):
+                              verbose=False, test_quant=False):
     x = x.view(-1, 784)
     x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
+
+    # FC0 LAYER
     fc0weight = model.fc0.weight.data
     model.fc0.weight.data = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
 
-    if act_quant:
+    if act_quant or test_quant:
         c, m_x, m_w = mapMultiplierModel(x, model.fc0.weight.data, num_bits)
 
     x = model.fc0(x)
 
-    if act_quant:
+    if act_quant or test_quant:
         comp = m_x * m_w * c
         x = x + comp
 
@@ -260,15 +249,19 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     if act_quant:
         x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
 
+    # FC1 LAYER
     fc1weight = model.fc1.weight.data
     model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
 
-    # <begin> Manual fc1 dot-product calculation
-    # b = model.fc1.bias.data
-    # dot_manual = torch.mm(x, torch.t(model.fc1.weight.data)) + b
-    # <end>   Manual fc1 dot-product calculation
+    if act_quant or test_quant:
+        c, m_x, m_w = mapMultiplierModel(x, model.fc1.weight.data, num_bits)
 
     x = model.fc1(x)
+
+    if act_quant or test_quant:
+        comp = m_x * m_w * c
+        x = x + comp
+
     x = F.relu(x)
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
@@ -276,37 +269,59 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
     if act_quant:
         x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
 
+    # FC2 LAYER
+    fc2weight = model.fc2.weight.data
+    model.fc2.weight.data = FakeQuantOp.apply(model.fc2.weight.data, num_bits, None, None, verbose)
+
+    if act_quant or test_quant:
+        c, m_x, m_w = mapMultiplierModel(x, model.fc2.weight.data, num_bits)
+
     x = model.fc2(x)
+
+    if act_quant or test_quant:
+        comp = m_x * m_w * c
+        x = x + comp
 
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc2')
 
-    return F.log_softmax(x, dim=1), fc0weight, fc1weight, stats
+    if act_quant:
+        x = FakeQuantOp.apply(x, num_bits, stats['fc2']['ema_min'], stats['fc2']['ema_max'], verbose)
+
+    return F.log_softmax(x, dim=1), fc0weight, fc1weight, fc2weight, stats
 
 
 # # Train using Quantization Aware Training
 def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4,
                     verbose=False):
     model.train()
+    correct = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        output, fc0weight, fc1weight, stats = quantAwareTrainingForward(model, data, stats,
+        output, fc0weight, fc1weight, fc2weight, stats = quantAwareTrainingForward(model, data, stats,
                                                                         num_bits=num_bits,
                                                                         act_quant=act_quant,
-                                                                        verbose=verbose)
+                                                                        verbose=verbose,
+                                                                        test_quant=False)
 
         model.fc0.weight.data = fc0weight
         model.fc1.weight.data = fc1weight
+        model.fc2.weight.data = fc2weight
 
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
 
+        pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+        correct += pred.eq(target.view_as(pred)).sum().item()
+
         if batch_idx % args["log_interval"] == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader), loss.item()))
+            print(
+                'Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tCorrect: {}\tBatch: {}\tLength(data): {}\tAccuracy: {:.2f}'.format(
+                    epoch, (batch_idx+1) * len(data), len(train_loader.dataset),
+                           100. * (batch_idx+1) / len(train_loader), loss.item(), correct, batch_idx+1, len(data),
+                           100. * correct / ((batch_idx+1) * len(data))))
     return stats
 
 
@@ -317,13 +332,15 @@ def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output, fc0weight, fc1weight, _ = quantAwareTrainingForward(model, data, stats,
+            output, fc0weight, fc1weight, fc2weight, _ = quantAwareTrainingForward(model, data, stats,
                                                                         num_bits=num_bits,
                                                                         act_quant=act_quant,
-                                                                        verbose=False)
+                                                                        verbose=False,
+                                                                        test_quant=True)
 
             model.fc0.weight.data = fc0weight
             model.fc1.weight.data = fc1weight
+            model.fc2.weight.data = fc2weight
 
             test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
