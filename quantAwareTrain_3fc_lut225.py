@@ -301,6 +301,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         x = x - comp
 
     x = F.relu(x)
+
     with torch.no_grad():
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
@@ -468,4 +469,4 @@ def mainQuantAware(mnist=True):
 
 
 torch.set_printoptions(threshold=1_000_000)
-model, old_stats = mainQuantAware()
+trained_model, old_stats = mainQuantAware()
