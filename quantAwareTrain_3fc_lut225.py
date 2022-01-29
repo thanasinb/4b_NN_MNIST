@@ -231,23 +231,25 @@ class FakeQuantOp(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, num_bits=8, min_val=None, max_val=None, verbose=False):
         x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val, verbose=verbose)
+        x_scale = x.scale
+        x_q = x.tensor
         x = dequantize_tensor(x)
-        return x
+        return x, x_scale, x_q
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, grad_scale, grad_quantised):
         # straight through estimator
         return grad_output, None, None, None, None
 
 
-def mapMultiplierModel(x, w, num_bits):
-    x = quantize_tensor(x, num_bits)
-    w = quantize_tensor(w, num_bits)
+def mapMultiplierModel(q_x, q_w):
+    # x = quantize_tensor(x, num_bits)
+    # w = quantize_tensor(w, num_bits)
     # m = x.scale * w.scale
-    x_quant = x.tensor
-    w_quant_t = torch.t(w.tensor)  # y = x.wT + b
+    # x_quant = x.tensor
+    q_w_t = torch.t(q_w)  # y = x.wT + b
 
-    res = [[sum(lut_diff[a][b] for a, b in zip(X_row, Y_col)) for Y_col in zip(*w_quant_t)] for X_row in x_quant]
+    res = [[sum(lut_diff[a][b] for a, b in zip(X_row, Y_col)) for Y_col in zip(*q_w_t)] for X_row in q_x]
     res = torch.tensor(res)
     # res = torch.zeros([x_quant.size(0), w_quant_t.size(1)])
     # for i in range(x_quant.size(0)):
@@ -257,21 +259,23 @@ def mapMultiplierModel(x, w, num_bits):
     #             res[i][j] += lut_diff[x_quant[i][k]][w_quant_t[k][j]]
 
     # c = res*m
-    return res, x.scale, w.scale
+    return res
 
 
 # ## Quantization Aware Training Forward Pass
 def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
                               verbose=False, test_quant=False):
     x = x.view(-1, 784)
-    x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
+    # print("\nfc0 input")
+    x, m_x, q_x = FakeQuantOp.apply(x, num_bits, None, None, verbose)
 
     # FC0 LAYER
     fc0weight = model.fc0.weight.data
-    model.fc0.weight.data = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
+    # print("\nfc0 weight")
+    model.fc0.weight.data, m_w, q_w = FakeQuantOp.apply(model.fc0.weight.data, num_bits, None, None, verbose)
 
     if act_quant or test_quant:
-        c, m_x, m_w = mapMultiplierModel(x, model.fc0.weight.data, num_bits)
+        c = mapMultiplierModel(q_x, q_w)
 
     x = model.fc0(x)
 
@@ -285,14 +289,16 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc0')
 
     if act_quant:
-        x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
+        print("\nfc0 activation")
+        x, m_x, q_x = FakeQuantOp.apply(x, num_bits, stats['fc0']['ema_min'], stats['fc0']['ema_max'], verbose)
 
     # FC1 LAYER
     fc1weight = model.fc1.weight.data
-    model.fc1.weight.data = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
+    # print("\nfc1 weight")
+    model.fc1.weight.data, m_w, q_w = FakeQuantOp.apply(model.fc1.weight.data, num_bits, None, None, verbose)
 
     if act_quant or test_quant:
-        c, m_x, m_w = mapMultiplierModel(x, model.fc1.weight.data, num_bits)
+        c = mapMultiplierModel(q_x, q_w)
 
     x = model.fc1(x)
 
@@ -306,14 +312,16 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc1')
 
     if act_quant:
-        x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
+        print("\nfc1 activation")
+        x, m_x, q_x = FakeQuantOp.apply(x, num_bits, stats['fc1']['ema_min'], stats['fc1']['ema_max'], verbose)
 
     # FC2 LAYER
     fc2weight = model.fc2.weight.data
-    model.fc2.weight.data = FakeQuantOp.apply(model.fc2.weight.data, num_bits, None, None, verbose)
+    # print("\nfc2 weight")
+    model.fc2.weight.data, m_w, q_w = FakeQuantOp.apply(model.fc2.weight.data, num_bits, None, None, verbose)
 
     if act_quant or test_quant:
-        c, m_x, m_w = mapMultiplierModel(x, model.fc2.weight.data, num_bits)
+        c = mapMultiplierModel(q_x, q_w)
 
     x = model.fc2(x)
 
@@ -325,7 +333,8 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
         stats = updateStats(x.clone().view(x.shape[0], -1), stats, 'fc2')
 
     if act_quant:
-        x = FakeQuantOp.apply(x, num_bits, stats['fc2']['ema_min'], stats['fc2']['ema_max'], verbose)
+        print("\nfc2 activation")
+        x, m_x, q_x = FakeQuantOp.apply(x, num_bits, stats['fc2']['ema_min'], stats['fc2']['ema_max'], verbose)
 
     return F.log_softmax(x, dim=1), fc0weight, fc1weight, fc2weight, stats
 
