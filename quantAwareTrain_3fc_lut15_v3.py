@@ -8,6 +8,27 @@ from torchvision import datasets, transforms
 from collections import namedtuple
 import matplotlib.pyplot as plt
 import numpy as np
+
+                       # [0, 1, 2, 3, 4, 5, 6, 7]
+lut_ideal_7 = np.array([ [0, 0, 0, 0, 0, 0, 0, 0],  # 0
+                         [0, 1, 1, 1, 1, 1, 2, 2],  # 1
+                         [0, 1, 2, 2, 2, 3, 3, 3],  # 2
+                         [0, 2, 2, 3, 3, 3, 4, 4],  # 3
+                         [0, 2, 3, 3, 4, 4, 5, 5],  # 4
+                         [0, 2, 3, 3, 4, 5, 5, 6],  # 5
+                         [0, 2, 3, 4, 4, 5, 6, 6],  # 6
+                         [0, 3, 3, 4, 5, 5, 6, 7]]) # 7
+
+                        # [0, 1, 2, 3, 4, 5, 6, 7]
+lut_actual_7 = np.array([ [0, 0, 0, 0, 0, 0, 0, 0],   # 0
+                          [0, 1, 1, 1, 1, 1, 2, 2],   # 1
+                          [0, 1, 2, 2, 2, 3, 3, 3],   # 2
+                          [0, 2, 2, 3, 3, 3, 4, 4],   # 3
+                          [0, 2, 3, 3, 4, 4, 5, 5],   # 4
+                          [0, 2, 3, 3, 4, 5, 5, 6],   # 5
+                          [0, 2, 3, 4, 4, 5, 6, 6],   # 6
+                          [0, 3, 3, 4, 5, 5, 6, 7]])  # 7
+
                        # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]])
 lut_ideal_15 = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0,  0,  0,  0],   # 0
                          [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,  1,  1,  1,  1,  1],   # 1
@@ -81,7 +102,8 @@ lut_actual_225 = np.array([[0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	0,	 0,	    0,	   0,	  
                            [0,	3,	8,	15,	24,	35,	48,	63,	72,	90,	110, 132,	144,   169,	  196,	 225]])
 
 
-lut_diff = lut_ideal_15 - lut_actual_15
+lut_diff = lut_ideal_7 - lut_actual_7
+# lut_diff = lut_ideal_15 - lut_actual_15
 # lut_diff = lut_ideal_225 - lut_actual_225
 
 
@@ -116,7 +138,7 @@ class Net(nn.Module):
 QTensor = namedtuple('QTensor', ['tensor', 'scale', 'zero_point'])
 
 
-def calcScaleZeroPoint(min_val, max_val, num_bits=8):
+def calcScaleZeroPoint(min_val, max_val, num_bits=3):
     # Calc Scale and zero point of next
     qmin = 0.
     qmax = 2. ** num_bits - 1.
@@ -138,7 +160,7 @@ def calcScaleZeroPoint(min_val, max_val, num_bits=8):
     return scale, zero_point
 
 
-def calcScaleZeroPointSym(min_val, max_val, num_bits=8):
+def calcScaleZeroPointSym(min_val, max_val, num_bits=3):
     # Calc Scale
     max_val = max(abs(min_val), abs(max_val))
     qmin = 0.
@@ -149,7 +171,7 @@ def calcScaleZeroPointSym(min_val, max_val, num_bits=8):
     return scale, 0
 
 
-def quantize_tensor(x, num_bits=8, min_val=None, max_val=None, verbose=False):
+def quantize_tensor(x, num_bits=3, min_val=None, max_val=None, verbose=False):
     if not min_val and not max_val:
         min_val, max_val = x.min(), x.max()
 
@@ -171,7 +193,7 @@ def dequantize_tensor(q_x):
     return q_x.scale * (q_x.tensor.float() - q_x.zero_point)
 
 
-def quantize_tensor_sym(x, num_bits=8, min_val=None, max_val=None):
+def quantize_tensor_sym(x, num_bits=3, min_val=None, max_val=None):
     if not min_val and not max_val:
         min_val, max_val = x.min(), x.max()
 
@@ -230,7 +252,7 @@ def updateStats(x, stats, key):
 
 class FakeQuantOp(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, num_bits=8, min_val=None, max_val=None, verbose=False):
+    def forward(ctx, x, num_bits=3, min_val=None, max_val=None, verbose=False):
         x = quantize_tensor(x, num_bits=num_bits, min_val=min_val, max_val=max_val, verbose=verbose)
         x_scale = x.scale
         x_q = x.tensor
@@ -259,7 +281,7 @@ def mapMultiplierModel(q_x, q_w):
 
 
 # ## Quantization Aware Training Forward Pass
-def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=8, act_quant=False,
+def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, num_bits=3, act_quant=False,
                               verbose=False, test_quant=False):
     x = x.view(-1, 784)
     # print("\nfc0 input")
@@ -336,7 +358,7 @@ def quantAwareTrainingForward(model, x, stats, vis=False, axs=None, sym=False, n
 
 
 # # Train using Quantization Aware Training
-def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=4,
+def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, act_quant=False, num_bits=3,
                     verbose=False):
     model.train()
     correct = 0
@@ -369,7 +391,7 @@ def trainQuantAware(args, model, device, train_loader, optimizer, epoch, stats, 
     return stats
 
 
-def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=4):
+def testQuantAware(args, model, device, test_loader, stats, act_quant, num_bits=3):
     model.eval()
     test_loss = 0
     correct = 0
@@ -402,7 +424,7 @@ def mainQuantAware(mnist=True):
     test_batch_size = 64
     epochs = 2
     epochs_act_quant_active = 1
-    num_bits = 4
+    num_bits = 3
     lr = 0.01
     momentum = 0.5
     seed = 1
